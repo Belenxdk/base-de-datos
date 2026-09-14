@@ -1,7 +1,7 @@
 declare
    type r_detalle_pedido is record (
          id_producto     number,
-         nombre_metodo   varchar2(80),
+         nombre_producto   varchar2(80),
          cantidad        number,
          precio_unitario number,
          subtotal        number
