@@ -1,14 +1,6 @@
--- =====================================================================
--- BDY1103 - Evaluación Parcial 2: Programas PL/SQL (pastelería)
--- Ejecutar DESPUÉS de "create table clientes(.sql" (tablas + datos).
--- Orden: 0) tabla de log  1) funciones  2) procedimientos
---        3) package       4) triggers   5) pruebas
--- =====================================================================
+
 SET SERVEROUTPUT ON;
 
--- ---------------------------------------------------------------------
--- 0) TABLA DE LOG (la usan el package y los triggers)
--- ---------------------------------------------------------------------
 CREATE TABLE log_eventos (
   id_log     NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   fecha      DATE DEFAULT SYSDATE,
@@ -18,11 +10,6 @@ CREATE TABLE log_eventos (
   detalle    VARCHAR2(200)
 );
 
--- ---------------------------------------------------------------------
--- 1) FUNCIONES ALMACENADAS
--- ---------------------------------------------------------------------
-
--- Con parámetro: total de un pedido (usable en SELECT y en PL/SQL)
 CREATE OR REPLACE FUNCTION fn_total_pedido (p_id_pedido IN NUMBER)
 RETURN NUMBER IS
   v_total NUMBER;
@@ -35,7 +22,6 @@ BEGIN
 END fn_total_pedido;
 /
 
--- Sin parámetros: monto total de todos los pedidos pendientes
 CREATE OR REPLACE FUNCTION fn_total_pendiente
 RETURN NUMBER IS
   v_total NUMBER;
@@ -49,7 +35,6 @@ BEGIN
 END fn_total_pendiente;
 /
 
--- Con parámetros: 1 si hay ingredientes para producir N unidades, 0 si no
 CREATE OR REPLACE FUNCTION fn_stock_suficiente (
   p_id_producto IN NUMBER,
   p_cantidad    IN NUMBER
@@ -66,11 +51,6 @@ BEGIN
 END fn_stock_suficiente;
 /
 
--- ---------------------------------------------------------------------
--- 2) PROCEDIMIENTOS ALMACENADOS
--- ---------------------------------------------------------------------
-
--- Sin parámetros: lista los pedidos pendientes (usa fn_total_pedido)
 CREATE OR REPLACE PROCEDURE sp_listar_pedidos_pendientes IS
 BEGIN
   DBMS_OUTPUT.PUT_LINE('--- PEDIDOS PENDIENTES ---');
@@ -88,7 +68,6 @@ BEGIN
 END sp_listar_pedidos_pendientes;
 /
 
--- Con parámetros IN: cambia el estado de un pedido
 CREATE OR REPLACE PROCEDURE sp_actualizar_estado_pedido (
   p_id_pedido IN NUMBER,
   p_estado    IN VARCHAR2
@@ -106,7 +85,6 @@ BEGIN
 END sp_actualizar_estado_pedido;
 /
 
--- Procesamiento masivo: descuenta del stock los ingredientes de un pedido
 CREATE OR REPLACE PROCEDURE sp_descontar_ingredientes (p_id_pedido IN NUMBER) IS
 BEGIN
   FOR d IN (SELECT id_producto, cantidad
@@ -126,7 +104,6 @@ BEGIN
 END sp_descontar_ingredientes;
 /
 
--- Procesamiento masivo con parámetros IN y OUT: repone ingredientes bajo el mínimo
 CREATE OR REPLACE PROCEDURE sp_reponer_stock_bajo (
   p_factor        IN  NUMBER DEFAULT 3,
   p_reabastecidos OUT NUMBER
@@ -139,11 +116,7 @@ BEGIN
 END sp_reponer_stock_bajo;
 /
 
--- ---------------------------------------------------------------------
--- 3) PACKAGE (elementos públicos y privados + bloque de inicialización)
--- ---------------------------------------------------------------------
 CREATE OR REPLACE PACKAGE pkg_pasteleria AS
-  -- Públicos: constantes y subprogramas visibles desde fuera
   c_estado_pendiente   CONSTANT VARCHAR2(20) := 'PENDIENTE';
   c_estado_preparacion CONSTANT VARCHAR2(20) := 'EN PREPARACION';
   c_estado_entregado   CONSTANT VARCHAR2(20) := 'ENTREGADO';
@@ -156,7 +129,6 @@ END pkg_pasteleria;
 /
 
 CREATE OR REPLACE PACKAGE BODY pkg_pasteleria AS
-  -- Privados: solo se pueden usar dentro del package
   c_iva           CONSTANT NUMBER := 0.19;
   g_inicio_sesion DATE;
 
@@ -178,8 +150,7 @@ CREATE OR REPLACE PACKAGE BODY pkg_pasteleria AS
     RETURN TRUE;
   END validar_stock_pedido;
 
-  -- Públicos (implementación)
-  FUNCTION total_con_iva (p_id_pedido IN NUMBER) RETURN NUMBER IS
+FUNCTION total_con_iva (p_id_pedido IN NUMBER) RETURN NUMBER IS
   BEGIN
     RETURN ROUND(fn_total_pedido(p_id_pedido) * (1 + c_iva));
   END total_con_iva;
@@ -217,16 +188,10 @@ CREATE OR REPLACE PACKAGE BODY pkg_pasteleria AS
   END resumen_ventas;
 
 BEGIN
-  -- Bloque de inicialización: se ejecuta una vez por sesión
   g_inicio_sesion := SYSDATE;
 END pkg_pasteleria;
 /
 
--- ---------------------------------------------------------------------
--- 4) TRIGGERS
--- ---------------------------------------------------------------------
-
--- Nivel de SENTENCIA: audita cualquier INSERT/UPDATE/DELETE sobre pedidos
 CREATE OR REPLACE TRIGGER trg_pedidos_auditoria
 AFTER INSERT OR UPDATE OR DELETE ON pedidos
 BEGIN
@@ -239,7 +204,6 @@ BEGIN
 END trg_pedidos_auditoria;
 /
 
--- Nivel de FILA: un pedido ENTREGADO no puede volver a otro estado
 CREATE OR REPLACE TRIGGER trg_pedidos_estado
 BEFORE UPDATE OF estado ON pedidos
 FOR EACH ROW
@@ -251,7 +215,6 @@ BEGIN
 END trg_pedidos_estado;
 /
 
--- Nivel de FILA: valida cantidad y completa el precio desde productos
 CREATE OR REPLACE TRIGGER trg_detalle_validar
 BEFORE INSERT OR UPDATE ON detalle_pedidos
 FOR EACH ROW
@@ -268,7 +231,6 @@ BEGIN
 END trg_detalle_validar;
 /
 
--- Nivel de FILA con WHEN: alerta cuando un ingrediente baja del stock mínimo
 CREATE OR REPLACE TRIGGER trg_ingredientes_alerta
 AFTER UPDATE OF stock_actual ON ingredientes
 FOR EACH ROW
@@ -280,12 +242,7 @@ BEGIN
           ' (minimo ' || :NEW.stock_minimo || ')');
 END trg_ingredientes_alerta;
 /
-
--- ---------------------------------------------------------------------
--- 5) PRUEBAS (para capturas del informe y la presentación)
--- ---------------------------------------------------------------------
-
--- Funciones usadas dentro de sentencias SQL
+  
 SELECT id_pedido, estado, fn_total_pedido(id_pedido) AS total
   FROM pedidos;
 
@@ -294,16 +251,13 @@ SELECT fn_total_pendiente AS total_pendiente FROM dual;
 SELECT id_producto, nombre, fn_stock_suficiente(id_producto, 5) AS alcanza_para_5
   FROM productos;
 
--- Procedimiento sin parámetros
 EXEC sp_listar_pedidos_pendientes;
 
--- Package: confirma el pedido 1 (valida stock, descuenta ingredientes, cambia estado)
 EXEC pkg_pasteleria.confirmar_pedido(1);
 SELECT nombre, stock_actual FROM ingredientes ORDER BY id_ingrediente;
 SELECT pkg_pasteleria.total_con_iva(1) AS total_con_iva FROM dual;
 EXEC pkg_pasteleria.resumen_ventas;
 
--- Procedimiento con OUT: dispara trg_ingredientes_alerta al bajar bajo el mínimo
 UPDATE ingredientes SET stock_actual = 2 WHERE id_ingrediente = 5;
 DECLARE
   v_reabastecidos NUMBER;
@@ -313,17 +267,14 @@ BEGIN
 END;
 /
 
--- Trigger de fila: debe fallar con ORA-20030 (pedido 3 ya está ENTREGADO)
 BEGIN
   sp_actualizar_estado_pedido(3, 'PENDIENTE');
 END;
 /
 
--- Trigger de fila: debe fallar con ORA-20031 (cantidad inválida)
 INSERT INTO detalle_pedidos (id_pedido, id_producto, cantidad, precio_unitario)
 VALUES (1, 2, 0, NULL);
 
--- Resultado de los triggers de sentencia y de alerta
 SELECT * FROM log_eventos ORDER BY id_log;
 
 COMMIT;
